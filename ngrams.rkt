@@ -14,7 +14,7 @@
 (require racket/set)
 (require math/flonum) ; for log space calculations
 
-(define my-in-port   (open-input-file (string->path "greet.txt")))
+(define my-in-port   (open-input-file (string->path "data/greet.txt")))
 (define my-out-port (current-output-port))   ; read from stdout
 
 
