@@ -66,7 +66,8 @@
                                                  (equal? toks (get-n k (- n 1)))))
                                 keys))
                (candidates  (map  last                              context))
-               (frequencies (map (lambda (toks) (hash-ref ht toks)) context)))
+               (frequencies (map (lambda (toks) (hash-ref freqs toks)) context)))
+            ; Build and sample distribution
             (car (sample (discrete-dist candidates frequencies) 1))))
         
         (if (= k 0)
@@ -184,7 +185,7 @@
 ;(define (main)
 
   ; define n
-  (define n 2)
+  (define n 3)
   
   ; ngram model
   (define freqs (build-ngram-model n))
@@ -201,27 +202,3 @@
 ; call main
 ;(main)
 
-
-; get first n elements of list
-; recursive process
-(define (get-n lst k)
-  (if (or (= k 0) (null? lst))
-      '()
-      (cons (car lst)
-            (get-n (cdr lst) (- k 1)))))
-
-
-; work for generating random token
-(define ht (freqs 'hash))
-(define keys (hash-keys ht))
-
-(define context (filter (lambda (k) (and (= (length k) n)
-                                          (equal? '("read") (get-n k (- n 1)))))
-                         keys))
-
-(define candidates  (map  last                              context))
-(define frequencies (map (lambda (toks) (hash-ref ht toks)) context))
-
-(define d (discrete-dist candidates frequencies))
-
-(length (filter (lambda (t) (equal? t "a")) (sample d 10000)))
