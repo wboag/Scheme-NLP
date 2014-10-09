@@ -1,10 +1,10 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;  Scheme-NLP: ngrams.rkt                                                ;;
-;                                                                        ;;
-;  Purpose: Simple n-gram model for natural language                     ;;
-;                                                                        ;;
-;  Author: Willie Boag                                 wboag@cs.uml.edu  ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;  Scheme-NLP: ngrams.rkt                                                ;;
+;;                                                                        ;;
+;;  Purpose: Simple n-gram model for natural language                     ;;
+;;                                                                        ;;
+;;  Author: Willie Boag                                 wboag@cs.uml.edu  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 #lang racket
@@ -12,10 +12,10 @@
 (require racket/file)
 (require racket/string)
 (require racket/set)
-(require math/flonum) ; for log space calculations
+(require math/flonum)         ; for log space calculations
+(require math/distributions)  ; for text generation
 
 (define my-in-port   (open-input-file (string->path "data/greet.txt")))
-(define my-out-port (current-output-port))   ; read from stdout
 
 
 (define (build-ngram-model n)
@@ -34,7 +34,7 @@
     (define (obj-interface msg . args)
       (cond 
         
-        ((eq? msg 'hash ) freqs                                        )
+        ((eq? msg 'hash ) freqs)
         
         ; prob: <sentence> [smoothing-delta]
         ((eq? msg 'prob )
@@ -45,26 +45,43 @@
         ; generate: <k>
         ((eq? msg 'generate)
          (cond
-           ((=  (length args) 0) (generate  3              "<s>" ))
-           ((=  (length args) 1) (generate (car args)      "<s>" ))
-           ((>= (length args) 2) (generate (car args) (cadr args)))))
+           ((=  (length args) 0) (generate  3              '("<s>") ))
+           ((=  (length args) 1) (generate (car args)      '("<s>") ))
+           ((>= (length args) 2) (generate (car args)  (cadr args)))))
                         
-        ((eq? msg 'vocab) vocab                                        )))
+        ((eq? msg 'vocab) vocab)))
  
 
     
     ; generate k random tokens of text subject to training distribution
-    (define (generate k start)
-      ; TODO: Given token, randomly select new token using freq distribution
-      ; http://docs.racket-lang.org/math/Finite_Distribution_Families.html
-      (define (rand-tok tok)
-        tok)
-      (if (= k 0)
-          '()
-          (let
-              ((next (rand-tok start)))
-            (cons next
-                  (generate (- k 1) next)))))
+    (define (generate k start-tok) 
+      ; generate list of tokens
+      (define (generate-helper k start)
+        ; select one token for a given (n-1)-gram
+        (define (rand-tok toks)
+          (let*
+              ; FIXME: this is slow
+              ((keys (hash-keys freqs))
+               (context (filter (lambda (k) (and (= (length k) n)
+                                                 (equal? toks (get-n k (- n 1)))))
+                                keys))
+               (candidates  (map  last                              context))
+               (frequencies (map (lambda (toks) (hash-ref ht toks)) context)))
+            (car (sample (discrete-dist candidates frequencies) 1))))
+        
+        (if (= k 0)
+            '()
+            (let*
+                ((next-tok (rand-tok start))
+                 (next-ngram (append (cdr start) (list next-tok))))
+              ; End of sentence?
+              (if (equal? next-tok "</s>")
+                  (list "</s>")
+                  (cons next-tok
+                        (generate-helper (- k 1) next-ngram))))))
+      (append start-tok (generate-helper k start-tok)))
+      
+    
     
     ; Compute probability of a sentence
     (define (probability sent delta)
@@ -89,9 +106,8 @@
           0 ; ERROR
           (let
               ; If VERY small, then return 0 
-              ; (error comes from log space conversion)
               ((retVal (expt 2.718281828459045 (prob-helper sent))))
-            (if (< retVal (expt 10 -15))
+            (if (< retVal (expt 10 -10))
                 0
                 retVal))))
     
@@ -185,3 +201,27 @@
 ; call main
 ;(main)
 
+
+; get first n elements of list
+; recursive process
+(define (get-n lst k)
+  (if (or (= k 0) (null? lst))
+      '()
+      (cons (car lst)
+            (get-n (cdr lst) (- k 1)))))
+
+
+; work for generating random token
+(define ht (freqs 'hash))
+(define keys (hash-keys ht))
+
+(define context (filter (lambda (k) (and (= (length k) n)
+                                          (equal? '("read") (get-n k (- n 1)))))
+                         keys))
+
+(define candidates  (map  last                              context))
+(define frequencies (map (lambda (toks) (hash-ref ht toks)) context))
+
+(define d (discrete-dist candidates frequencies))
+
+(length (filter (lambda (t) (equal? t "a")) (sample d 10000)))
