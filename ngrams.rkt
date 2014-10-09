@@ -15,14 +15,16 @@
 (require math/flonum)         ; for log space calculations
 (require math/distributions)  ; for text generation
 
-(define my-in-port   (open-input-file (string->path "data/greet.txt")))
 
-
-(define (build-ngram-model n)
-   
+(define (build-ngram-model n . args)
+  
   ; data member variables
   (let 
-      ((freqs       (make-hash))   ; Buzzword: Hash Table
+      ((my-in-port (open-input-file (if (> (length args) 0)
+                                        (string->path (car args)      )
+                                        (string->path "data/greet.txt"))))
+       
+       (freqs       (make-hash))   ; Buzzword: Hash Table
        (vocab     (mutable-set))
        (epsilon1  (expt 10 -20))
        (epsilon2  (expt 10 -10)))
@@ -45,9 +47,7 @@
         ; generate: <k>
         ((eq? msg 'generate)
          (cond
-           ((=  (length args) 0) (generate  3              '("<s>") ))
-           ((=  (length args) 1) (generate (car args)      '("<s>") ))
-           ((>= (length args) 2) (generate (car args)  (cadr args)))))
+           ((= (length args) 2) (generate (car args)  (cadr args)))))
                         
         ((eq? msg 'vocab) vocab)))
  
@@ -96,13 +96,14 @@
                   ; smoothing
                   ((numer (+ count delta))
                    (denom (+ total (* delta
-                                      (length (set->list vocab))))))                  
-                   ;(print (list count delta))
-                   ;(newline)
-                   ;(print (list total (length (set->list vocab))))
-                   ;(newline)
-                   (lg* (fl (log (/ numer denom))) ; probability of ngram
-                      (prob-helper (cdr s)))))))   ; probability of the rest
+                                      (length (set->list vocab))))))  
+                ;(print (list count delta))
+                ;(newline)
+                ;(print (list total (length (set->list vocab))))
+                ;(newline)
+                ;(newline)
+                (lg* (fl (log (/ numer denom))) ; probability of ngram
+                     (prob-helper (cdr s)))))))   ; probability of the rest
       (if (< (length sent) n)
           0 ; ERROR
           (let
@@ -112,23 +113,7 @@
                 0
                 retVal))))
     
-
     
-    ; read the ngrams from the file
-    (define (build-model-helper line)
-      (if (eq? line eof)
-          obj-interface
-          (begin 
-            ; read line into vocabulary
-            (update-vocabulary (string-split line " "))
-            
-            ; count frquencies of n- and (n-1)-grams
-            (count-sentence (string-split line " ")    n   ) 
-            (count-sentence (string-split line " ") (- n 1)) 
-
-            ; goto next line
-            (build-model-helper (read-line my-in-port)))))
-
 
     ; Count frequencies of one line
     ; Buzzword: Map/Reduce
@@ -176,13 +161,50 @@
           (cons (car lst)
                 (get-n (cdr lst) (- k 1)))))
 
+    
+    
+    ; read the ngrams from the file
+    (define (build-model-helper line)
+      (if (eq? line eof)
+          obj-interface
+          (begin 
+            ; read line into vocabulary
+            (update-vocabulary (string-split line " "))
+            
+            ; count frquencies of n- and (n-1)-grams
+            (count-sentence (string-split line " ")    n   ) 
+            (count-sentence (string-split line " ") (- n 1)) 
 
+            ; goto next line
+            (build-model-helper (read-line my-in-port)))))
+
+    
+    
     ; Kick off line-by-line reader
     (build-model-helper (read-line my-in-port))))
 
   
   
-;(define (main)
+; Demo for sentence probabilities
+(define (prob-demo)
+
+  ; define n
+  (define n 2)
+  
+  ; ngram model
+  (define freqs (build-ngram-model n "data/train.txt"))
+  
+  ; evaluate model
+  ; FIXME - OOV words lead to 0, even on smoothed
+  (print (freqs 'prob "<s> Cher read a book </s>" 0))  ; unsmoothed
+  (newline)
+  (print (freqs 'prob "<s> Cher read a book </s>" 1))  ;   smoothed
+  
+)
+
+
+; Demo for text generation
+(define (generate-demo)
 
   ; define n
   (define n 3)
@@ -190,15 +212,20 @@
   ; ngram model
   (define freqs (build-ngram-model n))
   
-  ; evaluate model
-  (print (freqs 'prob "<s> Cher read a book </s>" 0))  ; unsmoothed
+  ; generate text
+  (print (freqs 'generate 5 '("read" "a")))
   (newline)
-  (print (freqs 'prob "<s> Cher read a book </s>" 1))  ;   smoothed
-  
-;)
-
-
+  (print (freqs 'generate 5 '("read" "a")))
+         
+  )
 
 ; call main
 ;(main)
 
+
+
+; define n
+(define n 3)
+
+; ngram model
+(define freqs (build-ngram-model n))
