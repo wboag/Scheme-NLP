@@ -1,0 +1,3 @@
+<s> John read Moby Dick </s>
+<s> Mary read a different book </s>
+<s> She read a book by Cher </s>

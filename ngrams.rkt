@@ -1,3 +1,12 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;  Scheme-NLP: ngrams.rkt                                                ;;
+;                                                                        ;;
+;  Purpose: Simple n-gram model for natural language                     ;;
+;                                                                        ;;
+;  Author: Willie Boag                                 wboag@cs.uml.edu  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 #lang racket
 
 (require racket/file)
