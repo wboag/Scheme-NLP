@@ -18,8 +18,7 @@
 (require math/distributions)  ; for text generation
 
 
-; Instantiate 
-;(define a (new ngram-model (n 2)))
+
 
 (define ngram-model
   (class object%
