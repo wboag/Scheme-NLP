@@ -96,19 +96,34 @@
                   ; smoothing
                   ((numer (+ count delta))
                    (denom (+ total (* delta
-                                      (length (set->list vocab))))))  
-                ;(print (list count delta))
-                ;(newline)
-                ;(print (list total (length (set->list vocab))))
-                ;(newline)
-                ;(newline)
-                (lg* (fl (log (/ numer denom))) ; probability of ngram
-                     (prob-helper (cdr s)))))))   ; probability of the rest
+                                      (length (set->list vocab)))))) 
+                (print (get-n s    n    ))
+                (newline)
+                (print (get-n s (- n 1) ))
+                (newline)
+                (print (list count delta))
+                (newline)
+                (print (list total (length (set->list vocab))))
+                (newline)
+                (newline)
+                (lg* (fl (log (/ numer denom)))  ; probability of ngram
+                     (prob-helper (cdr s)))))))  ; probability of the rest
+      
+      ; Replace unseen tokens with OOV token
+      (define (replace-with-OOV tok) 
+        (if (set-member? vocab tok) tok "OOV"))
       (if (< (length sent) n)
           0 ; ERROR
-          (let
-              ; If VERY small, then return 0 
-              ((retVal (expt 2.718281828459045 (prob-helper sent))))
+          (let*
+              ((oov-replaced (map replace-with-OOV sent))
+               (sent-with-tags (append '("<s>") oov-replaced '("</s>")))
+               (retVal (expt 2.718281828459045 (prob-helper sent-with-tags))))
+            ;(newline)
+            ;(display oov-replaced)
+            ;(newline)
+            ;(display sent-with-tags)
+            ;(newline)
+            ; If VERY small, then return 0 
             (if (< retVal (expt 10 -10))
                 0
                 retVal))))
@@ -135,7 +150,7 @@
         (begin
           (let
               ((freq (hash-ref freqs ngram 0)))
-            (hash-set! freqs ngram (+ 1 freq))) ; increase gobal count
+            (hash-set! freqs ngram (+ 1 freq))) ; increase global count
           0))
         
       (map prob-ngram (foldr collect '() line)))
@@ -154,14 +169,13 @@
     
     
     ; get first n elements of list
-    ; recursive process
+    ; Buzzword: recursive process
     (define (get-n lst k)
       (if (or (= k 0) (null? lst))
           '()
           (cons (car lst)
                 (get-n (cdr lst) (- k 1)))))
 
-    
     
     ; read the ngrams from the file
     (define (build-model-helper line)
@@ -172,16 +186,22 @@
             (update-vocabulary (string-split line " "))
             
             ; count frquencies of n- and (n-1)-grams
-            (count-sentence (string-split line " ")    n   ) 
-            (count-sentence (string-split line " ") (- n 1)) 
+            (let
+                ((toks (append '("<s>")
+                               (string-split line " ")
+                               '("</s>"))))
+              (count-sentence toks    n   ) 
+              (count-sentence toks (- n 1))) 
 
             ; goto next line
             (build-model-helper (read-line my-in-port)))))
 
-    
-    
-    ; Kick off line-by-line reader
-    (build-model-helper (read-line my-in-port))))
+     
+    ; Build object by reading file
+    (set-add! vocab "OOV")
+    (build-model-helper (read-line my-in-port)))
+  )
+
 
   
   
@@ -192,13 +212,13 @@
   (define n 2)
   
   ; ngram model
-  (define freqs (build-ngram-model n "data/train.txt"))
+  ;(define freqs (build-ngram-model n "data/train.txt"))
+  (define freqs (build-ngram-model n "data/greet.txt"))
   
   ; evaluate model
-  ; FIXME - OOV words lead to 0, even on smoothed
-  (print (freqs 'prob "<s> Cher read a book </s>" 0))  ; unsmoothed
+  (print (freqs 'prob "Cher read a book" 0))  ; unsmoothed
   (newline)
-  (print (freqs 'prob "<s> Cher read a book </s>" 1))  ;   smoothed
+  (print (freqs 'prob "Cher read a book" 1))  ;   smoothed
   
 )
 
@@ -225,7 +245,7 @@
 
 
 ; define n
-(define n 3)
+(define n 2)
 
 ; ngram model
 (define freqs (build-ngram-model n))
