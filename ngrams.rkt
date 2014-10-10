@@ -7,7 +7,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+
 #lang racket
+
 
 (require racket/file)
 (require racket/string)
@@ -16,126 +18,134 @@
 (require math/distributions)  ; for text generation
 
 
-(define (build-ngram-model n . args)
+; Instantiate 
+;(define a (new ngram-model (n 2)))
+
+(define ngram-model
+  (class object%
   
-  ; data member variables
-  (let 
-      ((my-in-port (open-input-file (if (> (length args) 0)
-                                        (string->path (car args)      )
-                                        (string->path "data/greet.txt"))))
-       
-       (freqs       (make-hash))   ; Buzzword: Hash Table
-       (vocab     (mutable-set))
-       (epsilon1  (expt 10 -20))
-       (epsilon2  (expt 10 -10)))
+    (super-new)
+
+    (init-field n)
+    
+    (field (freqs       (make-hash)))   ; Buzzword: Hash Table
+    (field (vocab     (mutable-set)))
+    (field (epsilon1  (expt 10 -20)))
+    (field (epsilon2  (expt 10 -10)))
     
     
-    ; Object interface
-    ; Buzzword: Message Passing
-    ; Buzzword: Variable-length argument
-    (define (obj-interface msg . args)
-      (cond 
+    
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Public  Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
+    
+    (define/public (train train-file)
+      ; Build object by reading file
+      (set-add! vocab "OOV")
+      (build-model-helper (open-input-file (string->path train-file))))
+
+
+    ; Compute probability of a sentence
+    (define/public (probability sent . args)
+      (priv-probability (tokenize sent) args))
+
         
-        ((eq? msg 'hash ) freqs)
-        
-        ; prob: <sentence> [smoothing-delta]
-        ((eq? msg 'prob )
-         (if (= (length args) 1)
-             (probability (string-split (first args) " ") 0)
-             (probability (string-split (first args) " ") (second args))))
-        
-        ; generate: <k>
-        ((eq? msg 'generate)
-         (cond
-           ((= (length args) 2) (generate (car args)  (cadr args)))))
-                        
-        ((eq? msg 'vocab) vocab)))
- 
+    ; generate k random tokens of text subject to training distribution
+    (define/public (generate k start-tok)
+      (if (= (length start-tok) (- n 1))
+          (append start-tok (priv-generate k start-tok))
+          (error "start-token argument for generate is wrong length")))
+      
+
+    ; Debugging purposes - give access to data members
+    (define/public (get-freqs) freqs)
+    (define/public (get-vocab) vocab)
+    
+    
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Private Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    
+    
+    ; Tokenize sentence
+    (define/private (tokenize sent)
+      (string-split sent " "))
 
     
-    ; generate k random tokens of text subject to training distribution
-    (define (generate k start-tok) 
-      ; generate list of tokens
-      (define (generate-helper k start)
-        ; select one token for a given (n-1)-gram
-        (define (rand-tok toks)
-          (let*
-              ; FIXME: this is slow
-              ((keys (hash-keys freqs))
-               (context (filter (lambda (k) (and (= (length k) n)
-                                                 (equal? toks (get-n k (- n 1)))))
-                                keys))
-               (candidates  (map  last                              context))
-               (frequencies (map (lambda (toks) (hash-ref freqs toks)) context)))
-            ; Build and sample distribution
-            (car (sample (discrete-dist candidates frequencies) 1))))
-        
-        (if (= k 0)
-            '()
-            (let*
-                ((next-tok (rand-tok start))
-                 (next-ngram (append (cdr start) (list next-tok))))
-              ; End of sentence?
-              (if (equal? next-tok "</s>")
-                  (list "</s>")
-                  (cons next-tok
-                        (generate-helper (- k 1) next-ngram))))))
-      (append start-tok (generate-helper k start-tok)))
+    
+    ; Compute probability of list of tokens
+    (define/private (priv-probability toks args)
       
-    
-    
-    ; Compute probability of a sentence
-    (define (probability sent delta)
-      (define (prob-helper s)
+      ; Iterate over sentence
+      (define (helper-prob s)
         (if (< (length s) n)
             0.0   ; log space  -> log(1) = 0
             (let
                 ((count (hash-ref freqs (get-n s    n   ) epsilon1))
                  (total (hash-ref freqs (get-n s (- n 1)) epsilon2)))
-              (let
+              (let*
                   ; smoothing
-                  ((numer (+ count delta))
-                   (denom (+ total (* delta
-                                      (length (set->list vocab)))))) 
-                (print (get-n s    n    ))
-                (newline)
-                (print (get-n s (- n 1) ))
-                (newline)
-                (print (list count delta))
-                (newline)
-                (print (list total (length (set->list vocab))))
-                (newline)
-                (newline)
-                (lg* (fl (log (/ numer denom)))  ; probability of ngram
-                     (prob-helper (cdr s)))))))  ; probability of the rest
-      
+                  ((smoothed (smoothing args count total)))
+                (lg* (fl (log smoothed))         ; probability of ngram
+                     (helper-prob (cdr s)))))))  ; probability of the rest
+
       ; Replace unseen tokens with OOV token
-      (define (replace-with-OOV tok) 
+      (define (helper-OOV-convert tok) 
         (if (set-member? vocab tok) tok "OOV"))
-      (if (< (length sent) n)
-          0 ; ERROR
+      
+      (if (< (length toks) n)
+          (error "toks argument for priv-probability is wrong length")
           (let*
-              ((oov-replaced (map replace-with-OOV sent))
+              ((oov-replaced (map helper-OOV-convert toks))
                (sent-with-tags (append '("<s>") oov-replaced '("</s>")))
-               (retVal (expt 2.718281828459045 (prob-helper sent-with-tags))))
-            ;(newline)
-            ;(display oov-replaced)
-            ;(newline)
-            ;(display sent-with-tags)
-            ;(newline)
+               (retVal (expt 2.718281828459045 (helper-prob sent-with-tags))))
+
             ; If VERY small, then return 0 
             (if (< retVal (expt 10 -10))
                 0
                 retVal))))
     
     
+    
+    ; read the ngrams from the file
+    (define/private (build-model-helper my-in-port)
+      (let
+          ((line (read-line my-in-port)))
+        (if (eq? line eof)
+            void
+            (begin 
+              ; read line into vocabulary
+              (update-vocabulary (string-split line " "))
+              
+              ; count frquencies of n- and (n-1)-grams
+              (let
+                  ((toks (append '("<s>")
+                                 (string-split line " ")
+                                 '("</s>"))))
+                (count-sentence toks    n   ) 
+                (count-sentence toks (- n 1)))
+              ; goto next line
+              (build-model-helper my-in-port)))))
+    
 
+    
+    ; Update vocabulary of model
+    (define/private (update-vocabulary s)
+      (if (null? s)
+          0
+          (begin
+            (cond
+              ((and (not (equal? (car s) "<s>"))
+                    (not (equal? (car s) "</s>")))
+               (set-add! vocab (car s))))
+            (update-vocabulary (cdr s)))))
+    
+    
+    
     ; Count frequencies of one line
     ; Buzzword: Map/Reduce
-    (define (count-sentence line k)
+    (define/private (count-sentence line k)
+
       ; Group list of tokens into ngrams
       ; ex. (foldr collect '() '(a b c d e))  => '( (a b c) (b c d) (c d e) )
-      (define (collect a result)
+      (define (helper-collect a result)
         (cond
           ((null? result) 
            (list (list a)))
@@ -146,106 +156,87 @@
                  result))))
       
       ; Take an input ngram and increase the global count of it by 1
-      (define (prob-ngram ngram)
+      (define (helper-prob-ngram ngram)
         (begin
           (let
               ((freq (hash-ref freqs ngram 0)))
             (hash-set! freqs ngram (+ 1 freq))) ; increase global count
-          0))
-        
-      (map prob-ngram (foldr collect '() line)))
+          void))
+
+      ; map and reduce over line to count ngram frequencies
+      (map helper-prob-ngram (foldr helper-collect '() line)))
     
-    
-    ; Update vocabulary of model
-    (define (update-vocabulary s)
-      (if (null? s)
-          0
-          (begin
-            (cond
-              ((and (not (equal? (car s) "<s>"))
-                    (not (equal? (car s) "</s>")))
-                 (set-add! vocab (car s))))
-            (update-vocabulary (cdr s)))))
     
     
     ; get first n elements of list
-    ; Buzzword: recursive process
-    (define (get-n lst k)
+    (define/private (get-n lst k)
       (if (or (= k 0) (null? lst))
           '()
           (cons (car lst)
-                (get-n (cdr lst) (- k 1)))))
-
+                (get-n (cdr lst) (- k 1)))));;
     
-    ; read the ngrams from the file
-    (define (build-model-helper line)
-      (if (eq? line eof)
-          obj-interface
-          (begin 
-            ; read line into vocabulary
-            (update-vocabulary (string-split line " "))
-            
-            ; count frquencies of n- and (n-1)-grams
-            (let
-                ((toks (append '("<s>")
-                               (string-split line " ")
-                               '("</s>"))))
-              (count-sentence toks    n   ) 
-              (count-sentence toks (- n 1))) 
+    
 
-            ; goto next line
-            (build-model-helper (read-line my-in-port)))))
-
-     
-    ; Build object by reading file
-    (set-add! vocab "OOV")
-    (build-model-helper (read-line my-in-port)))
-  )
-
-
-  
-  
-; Demo for sentence probabilities
-(define (prob-demo)
-
-  ; define n
-  (define n 2)
-  
-  ; ngram model
-  ;(define freqs (build-ngram-model n "data/train.txt"))
-  (define freqs (build-ngram-model n "data/greet.txt"))
-  
-  ; evaluate model
-  (print (freqs 'prob "Cher read a book" 0))  ; unsmoothed
-  (newline)
-  (print (freqs 'prob "Cher read a book" 1))  ;   smoothed
-  
-)
-
-
-; Demo for text generation
-(define (generate-demo)
-
-  ; define n
-  (define n 3)
-  
-  ; ngram model
-  (define freqs (build-ngram-model n))
-  
-  ; generate text
-  (print (freqs 'generate 5 '("read" "a")))
-  (newline)
-  (print (freqs 'generate 5 '("read" "a")))
-         
-  )
-
-; call main
-;(main)
+    ; Smoothing 
+    (define/private (smoothing args count total)
+      (cond
+        ; no smoothing
+        ((null? args) 
+         (/ count total))
+        
+        ; additive (Laplace) smoothing
+        ((equal? (car args) 'additive)
+         (let
+             ((delta (cadr args)))
+           (/ (+ count delta)
+              (+ total (* delta (length (set->list vocab)))))))
+        ))
+      
+      
+      
+    ; generate list of tokens
+    (define/private (priv-generate k start)
+      
+      ; select one token for a given (n-1)-gram
+      (define (helper-rand-tok toks)
+        (let*
+            ; FIXME: this is slow
+            ((keys (hash-keys freqs))
+             (context (filter (lambda (k) (and (= (length k) n)
+                                               (equal? toks (get-n k (- n 1)))))
+                              keys))
+             (candidates  (map  last                              context))
+             (frequencies (map (lambda (toks) (hash-ref freqs toks)) context)))
+          ; Build and sample distribution
+          (car (sample (discrete-dist candidates frequencies) 1))))
+      
+      (if (= k 0)
+          '()
+          (let*
+              ((next-tok (helper-rand-tok start))
+               (next-ngram (append (cdr start) (list next-tok))))
+            ; End of sentence?
+            (if (equal? next-tok "</s>")
+                (list "</s>")
+                (cons next-tok
+                      (priv-generate (- k 1) next-ngram))))))
+    
+))
+   
 
 
+; Instantiate model
+(define a (new ngram-model (n 2)))
 
-; define n
-(define n 2)
+; Train model on input data
+(send a train "data/greet.txt")
 
-; ngram model
-(define freqs (build-ngram-model n))
+; Predict probabiity of a sentence
+(display (send a probability "Cher read a book"))
+(newline)
+(display (send a probability "Cher read a book" 'additive 1))
+(newline)
+
+; Generate a random sequence of text
+(display (send a generate 10 '("<s>")))
+(newline)

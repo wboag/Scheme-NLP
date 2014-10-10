@@ -14,8 +14,8 @@ Currently, Scheme-NLP has:
 
     1) An n-gram language model. This model:
   
-      - will come with out-of-the-box models (once I learn how to "pickle" in Scheme)
+      - will come with out-of-the-box models (once I learn how to serialize objects in Scheme)
       - the ability to train your own models.
-      - can predict the probabilities of sentences based on ngram frequencies from the training corpus.
+      - can predict the probabilities of sentences based on ngram frequencies.
       - supports additive (Laplace) smoothing.
-      - will be able to generate random text using the ngram frequncies as a probability distribution.
+      - can generate random sequences of text using a Markov process.
