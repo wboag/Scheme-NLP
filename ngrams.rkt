@@ -25,6 +25,7 @@
   
     (super-new)
 
+    ; FIXME - Does not work with n=1
     (init-field n)
     
     (field (freqs       (make-hash)))   ; Buzzword: Hash Table
@@ -37,10 +38,20 @@
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Public  Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     
     
-    (define/public (train train-file)
-      ; Build object by reading file
+    ; train: [train-file]
+    ; ex. (send this-model train "data/greet.txt")
+    (define/public (train . train-file)
+      ; OOV token for predicting on unseen tokens
       (set-add! vocab "OOV")
-      (build-model-helper (open-input-file (string->path train-file))))
+      
+      ; parse arguments
+      (cond
+        ((= (length train-file) 0)
+         (build-model-helper (open-input-file (string->path "data/greet.txt"))))
+        ((= (length train-file) 1)
+         (build-model-helper (open-input-file (string->path (car train-file)))))
+        (else
+         (error "Too many arguments given to train"))))
 
 
     ; Compute probability of a sentence
@@ -111,12 +122,12 @@
             void
             (begin 
               ; read line into vocabulary
-              (update-vocabulary (string-split line " "))
+              (update-vocabulary (tokenize line))
               
               ; count frquencies of n- and (n-1)-grams
               (let
                   ((toks (append '("<s>")
-                                 (string-split line " ")
+                                 (tokenize line)
                                  '("</s>"))))
                 (count-sentence toks    n   ) 
                 (count-sentence toks (- n 1)))
@@ -225,17 +236,18 @@
 
 
 ; Instantiate model
-(define a (new ngram-model (n 2)))
+(define model-a (new ngram-model (n 2)))
+(define model-b (new ngram-model (n 1)))
 
 ; Train model on input data
-(send a train "data/greet.txt")
+(send model-a train "data/greet.txt")
 
 ; Predict probabiity of a sentence
-(display (send a probability "Cher read a book"))
+(display (send model-a probability "Cher read a book"))
 (newline)
-(display (send a probability "Cher read a book" 'additive 1))
+(display (send model-a probability "Cher read a book" 'additive 1))
 (newline)
 
 ; Generate a random sequence of text
-(display (send a generate 10 '("<s>")))
+(display (send model-a generate 10 '("<s>")))
 (newline)
