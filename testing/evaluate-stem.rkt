@@ -1,3 +1,13 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;  Scheme-NLP: evaluate-stem.rkt                                         ;;
+;;                                                                        ;;
+;;  Purpose: Evaluate predictions from stemmer.                           ;;
+;;                                                                        ;;
+;;  Author: Willie Boag                                 wboag@cs.uml.edu  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
 #lang racket
 
 
