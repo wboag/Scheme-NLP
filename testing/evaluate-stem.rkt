@@ -12,32 +12,38 @@
 
 
 ; Evaluation
-(define (evaluate-porter unstemmed-file stemmed-file)
-  (let
-      ((unstemmed-port (open-input-file (string->path unstemmed-file)))
-       (  stemmed-port (open-input-file (string->path   stemmed-file)))
-       (recall 0)
-       (precision 0))
+(define (evaluate-porter text-file gold-file pred-file)
 
-    ; Run through file line-by-line and count correct/incorrect counts
-    (define (evaluate-helper)
-      (let
-          ((unstemmed-w (read-line unstemmed-port))
-           (  stemmed-w (read-line   stemmed-port)))
-        (if (or (equal? unstemmed-w eof)
-                (equal?   stemmed-w eof))
-            (list 0 0)  ; correct, incorrect
-            (let*
-                ((eval-rest (evaluate-helper))
-                 (  correct  (car  eval-rest))
-                 (incorrect  (cadr eval-rest)))
-              (if (equal? stemmed-w unstemmed-w)
-                  (list (+ 1 correct)      incorrect )
-                  (list      correct  (+ 1 incorrect)))))))
+  (define (zip text gold pred)
+    (list text gold pred))
+  
+  (define (correct-stem? text-gold-pred)
+    (equal? (second text-gold-pred) (third text-gold-pred)))
+  
+  (define (incorrect-stem? text-gold-pred)
+    (not (correct-stem? text-gold-pred)))
+  
+  (let 
+      ; Zip all three lists of data together
+      ((total  (map zip (file->list text-file)
+                        (file->list gold-file)
+                        (file->list pred-file))))
 
-    ; Get counts of correct,incorrect
-    (evaluate-helper)))
+    ; Display incorrect stems
+    (display (filter incorrect-stem? total))
+    
+    ; Statistics of performance
+    (newline)
+    (display "correct: ")
+    (display (length (filter correct-stem? total)))
+    (newline)
+    (display "total:   ")
+    (display (length                         total ))
+  
+  ))
 
 
 ; Run evaluation
-(evaluate-porter "data/vsample.txt" "data/osample.txt")
+(evaluate-porter "data/vocab.txt" 
+                 "data/output.txt" 
+                 "data/predictions.txt")

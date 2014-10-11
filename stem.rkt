@@ -13,14 +13,23 @@
 #lang racket
 
 
- ; Porter Stemmer
+; Give access to word stemmer
+(provide porter-stem)
+
+
+
+; Porter Stemmer
 (define porter-object
   (class object%
     
+    ; TODO - Optimization: Make string slicer in order to not use regexps
+    ; TODO - Optimization: "hash" regexps into bins to drastically reduce search
+    ; TODO - Style: Add predicate field to every suffix map
+    
     (super-new)
-
+    
     (field (successful-1b #f))
-
+    
     
     ; Step 2
     (field (step2-suffixes '( ("ATIONAL" "ATE")
@@ -28,7 +37,8 @@
                               ("ENCI"    "ENCE")
                               ("ANCI"    "ANCE")
                               ("IZER"    "IZE")
-                              ("ABLI"    "ABLE")
+                              ("LOGI"    "LOG")
+                              ("BLI"     "BLE")
                               ("ALLI"    "AL")
                               ("ENTLI"   "ENT")
                               ("ELI"     "E")
@@ -42,7 +52,7 @@
                               ("OUSNESS" "OUS")
                               ("ALITI"   "AL")
                               ("IVITI"   "IVE")
-                              ("BILITI"  "BLE"))))    
+                              ("BILITI"  "BLE"))))
     
     
     ; Step 3
@@ -74,87 +84,89 @@
                              ("OUS"   "")
                              ("IVE"   "")
                              ("IZE"   ""))))
-                             
+    
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Public  Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+    
     
     (define/public (stem w)
-      (begin
-        (set! successful-1b #f)    ; rest global field
-        (string-downcase (step4
-                          (step3
-                           (step2 
-                            (step1 (string-upcase w))))))))
-
+      (if (<= (string-length w) 2)
+          w
+          (begin
+            (set! successful-1b #f)    ; rest global field
+            (string-downcase (step5
+                              (step4
+                               (step3
+                                (step2 
+                                 (step1 (string-upcase w))))))))))
+      
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Private Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+    
+    
+    ;;;;;;;;;;;;;;;  5 Steps  ;;;;;;;;;;;;;;;
+    
     
     (define/private (step1 str)
-      (step1c (step1b (step1a str))))
-
-    
-    ;Step 1a
-    (define/private (step1a w)
-
-      ; SSES -> SS                         caresses  ->  caress
-      ; IES  -> I                          ponies    ->  poni
-      ;                                    ties      ->  ti
-      (define (step1a-1 str)
-        (let
-            ((sses (regexp-match #rx"^(.*)SSES$" str))
-             (ies  (regexp-match #rx"^(.*)IES$"  str)))
-          (cond
-            (sses(string-append (cadr sses) "SS"))
-            (ies (string-append (cadr ies)  "I" ))
-            (else str                             ))))
-
-      ; SS   -> SS                         caress    ->  caress
-      ; S    ->                            cats      ->  cat
-      (define (step1a-2 str)
-        (let
-            ((ss   (regexp-match #rx"^(.*)SS$"   str))
-             (s    (regexp-match #rx"^(.*)S$"     str)))
-          (cond
-            (ss  (string-append (cadr ss)   "SS"))
-            (s                  (cadr s)         )
-            (else str                              ))))
-
-      (step1a-2 (step1a-1 w)))
-    
-    
-    ;Step 1b
-    (define/private (step1b w)
-
-      (set! successful-1b #f)
       
-      ;
-      ;(m>0) EED -> EE                    feed      ->  feed
-      ;                                   agreed    ->  agree
-      ;(*v*) ED  ->                       plastered ->  plaster
-      ;                                   bled      ->  bled
-      ;(*v*) ING ->                       motoring  ->  motor
-      ;                                   sing      ->  sing
-      (define (step1b-main str)
-        (let
-            ((eed   (regexp-match #rx"^(.*)EED$" str))
-             (ed    (regexp-match #rx"^(.*)ED$"  str))
-             (ing   (regexp-match #rx"^(.*)ING$" str)))
-          (cond
-            (eed (if (> (get-m (cadr eed)) 0)
-                     (string-append (cadr eed) "EE")
-                     str))
-            (ed  (if (contains-vowel? (cadr ed))
-                     (begin
-                       (set! successful-1b #t)
-                       (cadr ed))
-                     str))
-            (ing (if (contains-vowel? (cadr ing))
-                     (begin
-                       (set! successful-1b #t)
-                       (cadr ing))
-                     str))
-            (else str))))
+      ;Step 1a
+      (define (step1a w)
+        
+        ; SSES -> SS                         caresses  ->  caress
+        ; IES  -> I                          ponies    ->  poni
+        ;                                    ties      ->  ti
+        (define (step1a-1 str)
+          (let
+              ((sses (regexp-match #rx"^(.*)SSES$" str))
+               (ies  (regexp-match #rx"^(.*)IES$"  str)))
+            (cond
+              (sses(string-append (cadr sses) "SS"))
+              (ies (string-append (cadr ies)  "I" ))
+              (else str                             ))))
+        
+        ; SS   -> SS                         caress    ->  caress
+        ; S    ->                            cats      ->  cat
+        (define (step1a-2 str)
+          (let
+              ((ss   (regexp-match #rx"^(.*)SS$"   str))
+               (s    (regexp-match #rx"^(.*)S$"     str)))
+            (cond
+              (ss  (string-append (cadr ss)   "SS"))
+              (s                  (cadr s)         )
+              (else str                              ))))
+        
+        (step1a-2 (step1a-1 w)))
+      
+      
+      ;Step 1b
+      (define (step1b w)
+        
+        ;
+        ;(m>0) EED -> EE                    feed      ->  feed
+        ;                                   agreed    ->  agree
+        ;(*v*) ED  ->                       plastered ->  plaster
+        ;                                   bled      ->  bled
+        ;(*v*) ING ->                       motoring  ->  motor
+        ;                                   sing      ->  sing
+        (define (step1b-main str)
+          (let
+              ((eed   (regexp-match #rx"^(.*)EED$" str))
+               (ed    (regexp-match #rx"^(.*)ED$"  str))
+               (ing   (regexp-match #rx"^(.*)ING$" str)))
+            (cond
+              (eed (if (> (get-m (cadr eed)) 0)
+                       (string-append (cadr eed) "EE")
+                       str))
+              (ed  (if (contains-vowel? (cadr ed))
+                       (begin
+                         (set! successful-1b #t)
+                         (cadr ed))
+                       str))
+              (ing (if (contains-vowel? (cadr ing))
+                       (begin
+                         (set! successful-1b #t)
+                         (cadr ing))
+                       str))
+              (else str))))
         
         ;  AT -> ATE                       conflat(ed)  ->  conflate
         ;  BL -> BLE                       troubl(ed)   ->  trouble
@@ -169,47 +181,48 @@
         ;(m=1 and *o) -> E               fail(ing)    ->  fail
         ;                                fil(ing)     ->  file      
         (define (step1b-extra str)
-          (if successful-1b
-              (let
-                  ((at    (regexp-match #rx"^(.*)AT$"   str))
-                   (bl    (regexp-match #rx"^(.*)BL$"   str))
-                   (iz    (regexp-match #rx"^(.*)IZ$"   str))
-                   (final (string-ref str (- (string-length str) 1))))
-                (cond
-                  (at (string-append (cadr at) "ATE"))
-                  (bl (string-append (cadr bl) "BLE"))
-                  (iz (string-append (cadr iz) "IZE"))
-                  ((and (ends-double-c? str)
-                        (not (equal? final #\L))
-                        (not (equal? final #\S))
-                        (not (equal? final #\Z)))
-                   (list->string (reverse (cdr (reverse (string->list str))))))
-                  ((and (ends-cvc? str)
-                        (= (get-m str) 1)
-                   (string-append str "E")))
-                  (else str)))
-              str))
-        
+          (let
+              ((at    (regexp-match #rx"^(.*)AT$"   str))
+               (bl    (regexp-match #rx"^(.*)BL$"   str))
+               (iz    (regexp-match #rx"^(.*)IZ$"   str))
+               (final (string-ref str (- (string-length str) 1))))
+            (cond
+              (at (string-append (cadr at) "ATE"))
+              (bl (string-append (cadr bl) "BLE"))
+              (iz (string-append (cadr iz) "IZE"))
+              ((and (ends-double-c? str)
+                    (not (equal? final #\L))
+                    (not (equal? final #\S))
+                    (not (equal? final #\Z)))
+               (list->string (reverse (cdr (reverse (string->list str))))))
+              ((and (ends-cvc? str)
+                    (= (get-m str) 1)
+                    (string-append str "E")))
+              (else str))))
+      
         (let
             ((stemmed (step1b-main w)))
           (if successful-1b
               (step1b-extra stemmed)
-              stemmed)))      
-
-    ; step 1c
-    ;
-    ;(*v*) Y -> I                    happy        ->  happi
-    ;                                sky          ->  sky
-    (define/private (step1c w)
-      (let
-          ((y   (regexp-match #rx"^(.*)Y$" w)))
-        (if (or (not y)
-                (not (contains-vowel? (cadr y))))
-            w
-            (string-append (cadr y) "i"))))
-
+              stemmed)))
+      
+      ; step 1c
+      ;
+      ;(*v*) Y -> I                    happy        ->  happi
+      ;                                sky          ->  sky
+      (define (step1c w)
+        (let
+            ((y   (regexp-match #rx"^(.*)Y$" w)))
+          (if (or (not y)
+                  (not (contains-vowel? (cadr y))))
+              w
+              (string-append (cadr y) "I"))))
+      
+      ; Walk through all sub-steps of Step 1
+      (step1c (step1b (step1a str))))
     
-
+    
+    
     ; Step 2
     ; (m>0) ATIONAL ->  ATE           relational     ->  relate
     ; (m>0) TIONAL  ->  TION          conditional    ->  condition
@@ -250,7 +263,7 @@
                   (step2-helper s (cdr suffixes))))))
       
       (step2-helper w step2-suffixes))
-        
+    
     
     
     
@@ -303,7 +316,7 @@
     ;(m>1) ATE   ->                  activate       ->  activ
     ;(m>1) ITI   ->                  angulariti     ->  angular
     ;(m>1) OUS   ->                  homologous     ->  homolog
-    ;;(m>1) IVE   ->                  effective      ->  effect
+    ;(m>1) IVE   ->                  effective      ->  effect
     ;(m>1) IZE   ->                  bowdlerize     ->  bowdler
     (define/private (step4 w)
       
@@ -313,25 +326,27 @@
             s
             (let
                 ((match (regexp-match 
-                        (pregexp (string-append "^(.*)"
-                                                (caar suffixes)
-                                                "$"))
-                        s)))
-              (if (and match                    ; match found
-                       (> (get-m (car match)) 1))      ; new stem must have m>0
-                  (let
-                      ((stem (cadr match)))
-                    (if (and (equal? (caar suffixes) "ION")
-                             (not (equal? (string-last stem) #\S))
-                             (not (equal? (string-last stem) #\T)))
-                        (step4-helper s (cdr suffixes))
-                        (string-append stem (cadar suffixes))))
+                         (pregexp (string-append "^(.*)"
+                                                 (caar suffixes)
+                                                 "$"))
+                         s)))
+              (if match
+                  ; match found
+                  (if (> (get-m (cadr match)) 1)  ; new stem must have m>1
+                      (let
+                          ((stem (cadr match)))
+                        (if (and (equal? (caar suffixes) "ION")
+                                 (not (equal? (string-last stem) #\S))
+                                 (not (equal? (string-last stem) #\T)))
+                            (step4-helper s (cdr suffixes))
+                            (string-append stem (cadar suffixes))))
+                      s)
                   (step4-helper s (cdr suffixes))))))
-            
+      
       (step4-helper w step4-suffixes))
     
     
-
+    
     ; Step 5
     (define/public (step5 w)
       
@@ -348,9 +363,9 @@
                 (> (get-m (cadr e)) 1) 
                 (and (= (get-m (cadr e)) 1)
                      (not (ends-cvc? (cadr e))))))
-               (cadr e)
-               str)))
-          
+              (cadr e)
+              str)))
+      
       ;Step 5b
       ;(m > 1 and *d and *L) -> single letter
       ;                                controll       ->  control
@@ -364,11 +379,16 @@
       
       (step5b (step5a w)))
     
-              
-    ; General purpoe helper function
+    
+    
+    ;;;;;;;  General Purpose Helpers  ;;;;;;;;
+    
+    
+    ; Get last character of string
     (define/private (string-last s)
       (string-ref s (sub1 (string-length s))))
-
+    
+    
     ; does input w contain any vowels?
     (define/private (contains-vowel? w)
       (ormap (lambda (i) (not (consonant? w i))) 
@@ -377,18 +397,33 @@
     
     ; Is character w[i] a consonant?
     (define/private (consonant? str ind)
-      (not
-       (regexp-match? #rx"((?i:(?<=.)(?i:a|e|i|o|u)|(?<=[^aeiou])y))"
-                      (substring str 
-                                 (max 0 (- ind 1)) 
-                                 (+ 1 ind)))))
-
+      (let
+          ((regex (if (or (= (string-length str) 1)
+                          (= ind 0))
+                      #rx"(?i:a|e|i|o|u)"
+                      #rx"(?i:.(?i:a|e|i|o|u))|(?i:[^aeiou]y)")))
+        ;(display (substring str 
+        ;                           (max 0 (- ind 1)) 
+        ;                           (+ 1 ind)))
+        ;(newline)
+        ;(display (not (regexp-match? regex
+        ;                             (substring str 
+        ;                                        (max 0 (- ind 1)) 
+        ;                                        (+ 1 ind)))))
+        ;(newline)
+        ;(newline)
+        (not
+         (regexp-match? regex
+                        (substring str 
+                                   (max 0 (- ind 1)) 
+                                   (+ 1 ind))))))
+    
     
     ; Does character end with a repeated consonant?
     (define/private (ends-double-c? w)
-      (regexp-match #px"^.*([^aeiouy])\\1$" w))
-
-
+      (regexp-match #px"^.*((?i:[^aeiouy]))\\1$" w))
+    
+    
     ; Does the stem end with cvc, where the second c is not W, X or Y ?
     (define/private (ends-cvc? w)
       (let*
@@ -402,9 +437,9 @@
          (not (equal? c #\W))
          (not (equal? c #\X))
          (not (equal? c #\Y)))))
-
-      
-    ; Get "measure of string 
+    
+    
+    ; Get "measure" of string 
     (define/private (get-m s)
       ; Number of inner VC pairs => half of the length of the inner list
       (- (/ (length (CV-split s)) 2) 1))
@@ -430,7 +465,7 @@
       ; iterative process to split string by repeatedly calling get-leading-CV
       (define (CV-split-helper s result)
         (if (= 0 (string-length s))
-              result
+            result
             (let*
                 ((C-V-rest (get-leading-CV s))
                  (C        (first  C-V-rest) )
@@ -440,8 +475,8 @@
       
       ; Break down str into C-Vs
       (CV-split-helper str '()))
-          
-))
+    
+    ))
 
 
 
@@ -451,93 +486,12 @@
 
 ; Mappable function
 (define (porter-stem w)
-  (send porter step5 w))
+  (send porter stem w))
 
 
-; Demo
-;(define words '("CARESSES"
-;                "PONIES"
-;                "TIES"
-;                "CARESS"
-;                "CATS"
-;                "FEED"
-;                "AGREED"
-;                "PLASTERED"
-;                "BLED"
-;                "MOTORING"
-;                "SING"))
-
-;(define words '("CONFLATED"
-;                "TROUBLED"
-;                "SIZED"
-;                "HOPPING"
-;                "TANNED"
-;                "FALLING"
-;                "HISSING"
-;                "FIZZED"
-;                "FAILING"
-;                "FILING"))
-
-;(define words '("HAPPY"
-;                "SKY"))
-
-;(define words '("RELATIONAL"
-;                "CONDITIONAL"
-;                "RATIONAL"
-;                "VALENCI"
-;                "HESITANCI"
-;                "DIGITIZER"
-;                "CONFORMABLI"
-;                "RADICALLI"
-;                "DIFFERENTLI"
-;                "VILELI"
-;                "ANALOGOUSLI"
-;                "VIETNAMIZATION"
-;                "PREDICATION"
-;                "OPERATOR"
-;                "FEUDALISM"
-;                "DECISIVENESS"
-;                "HOPEFULNESS"
-;                "CALLOUSNESS"
-;                "FORMALITI"
-;                "SENSITIVITI"
-;                "SENSIBILITI"))
-
-;(define words '("TRIPLIC"
-;                "FORMATIVE"
-;                "FORMALIZE"
-;                "ELECTRICITI"
-;                "ELECTRICAL"
-;                "HOPEFUL"
-;                "GOODNESS"))
-
-;(define words '("REVIVAL"
-;                "ALLOWANCE"
-;                "INFERENCE"
-;                "AIRLINER"
-;                "GYROSCOPIC"
-;                "ADJUSTABLE"
-;                "DEFENSIBLE"
-;                "IRRITANT"
-;                "REPLACEMENT"
-;                "ADJUSTMENT"
-;                "DEPENDENT"
-;                "ADOPTION"
-;                "HOMOLOGOU"
-;                "COMMUNISM"
-;                "ACTIVATE"
-;                "ANGULARITI"
-;                "HOMOLOGOUS"
-;                "EFFECTIVE"
-;                "BOWDLERIZE"))
- 
-
-(define words '("PROBATE"
-                "RATE"
-                "CEASE"
-                "CONTROLL"
-                "ROLL"))
-
-(display words)
-(newline)
-(display (map porter-stem words))
+;(define words '("humbly"))
+;(display words)
+;(newline)
+;(display (map porter-stem words))
+;(newline)
+;(display (length (map porter-stem words)))
