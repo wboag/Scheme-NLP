@@ -19,3 +19,10 @@ Currently, Scheme-NLP has:
       - can predict the probabilities of sentences based on ngram frequencies from the training corpus.
       - supports additive (Laplace) smoothing.
       - will be able to generate random text using the ngram frequncies as a probability distribution.
+
+
+    2) A word stemming module. This module:
+
+        - implements Porter's stemming algorithm.
+        - can stem word down to their root (ex. "training" -> "train")
+        - does not need any training.
