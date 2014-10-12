@@ -64,11 +64,21 @@
       (if (= (length start-tok) (- n 1))
           (append start-tok (priv-generate k start-tok))
           (error "start-token argument for generate is wrong length")))
-      
+     
+    
+    ; Gives access to ngram counts
+    (define/public (get-frequency phrase)
+      (let
+          ((k (length phrase)))
+        (if (or (= k (sub1 n)) (= k n))
+            (hash-ref freqs phrase 0)
+            (error (string-append "Cannot look up frequency of "
+                                  (number->string k)
+                                  "-gram")))))
 
     ; Debugging purposes - give access to data members
-    (define/public (get-freqs) freqs)
-    (define/public (get-vocab) vocab)
+    ;(define/public (get-freqs) freqs)
+    ;(define/public (get-vocab) vocab)
     
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Private Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
