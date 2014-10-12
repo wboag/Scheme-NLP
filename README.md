@@ -14,16 +14,15 @@ Currently, Scheme-NLP has:
 
     1) An n-gram language model. This model:
   
-      - will come with out-of-the-box models (once I learn how to serialize objects)
+      - will come with out-of-the-box models (once I learn how to serialize objects).
       - the ability to train your own models.
       - can predict the probabilities of sentences based on ngram frequencies.
       - supports additive (Laplace) smoothing.
-      - will be able to generate random text using the ngram frequncies as a probability distribution.
+      - can generate random text using a Markov process.
 
 
     2) A word stemming module. This module:
 
         - implements Porter's stemming algorithm.
-        - can stem word down to their root (ex. "training" -> "train")
-        - does not need any training.
-      - can generate random sequences of text using a Markov process.
+        - can stem a word down to its root. (ex. "training" -> "train")
+        - does not need any training data.
