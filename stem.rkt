@@ -92,7 +92,7 @@
       (if (<= (string-length w) 2)
           w
           (begin
-            (set! successful-1b #f)    ; rest global field
+            (set! successful-1b #f)    ; reset global field
             (string-downcase (step5
                               (step4
                                (step3
@@ -103,7 +103,7 @@
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Private Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     
     
-    ;;;;;;;;;;;;;;;  5 Steps  ;;;;;;;;;;;;;;;
+                  ;;;;;;;;;;;;;;;  5 Steps  ;;;;;;;;;;;;;;;
     
     
     (define/private (step1 str)
@@ -199,7 +199,8 @@
                     (= (get-m str) 1)
                     (string-append str "E")))
               (else str))))
-      
+
+        ; Run extra part if executed special rule in 1b
         (let
             ((stemmed (step1b-main w)))
           (if successful-1b
@@ -381,7 +382,7 @@
     
     
     
-    ;;;;;;;  General Purpose Helpers  ;;;;;;;;
+                  ;;;;;;;  General Purpose Helpers  ;;;;;;;;
     
     
     ; Get last character of string
