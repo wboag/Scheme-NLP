@@ -490,7 +490,7 @@
   (send porter stem w))
 
 
-;(define words '("humbly"))
+;(define words '("temporal"))
 ;(display words)
 ;(newline)
 ;(display (map porter-stem words))

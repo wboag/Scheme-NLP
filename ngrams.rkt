@@ -17,6 +17,7 @@
 (require math/flonum)         ; for log space calculations
 (require math/distributions)  ; for text generation
 
+(require "tokenizer.rkt")
 
 
 
@@ -82,12 +83,6 @@
     
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Private Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-    
-    
-    ; Tokenize sentence
-    (define/private (tokenize sent)
-      (string-split sent " "))
-
     
     
     ; Compute probability of list of tokens
