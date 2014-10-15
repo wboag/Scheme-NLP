@@ -20,6 +20,10 @@
 (require "tokenizer.rkt")
 
 
+; Make ngram model importable
+(provide ngram-model)
+
+
 
 (define ngram-model
   (class object%
@@ -55,31 +59,69 @@
          (error "Too many arguments given to train"))))
 
 
-    ; Compute probability of a sentence
+    ; probability: <n-gram|(n-1)-gram> ['smooth 'additive <number>]
+    ;
+    ; Purpose: Compute the probability of a sequence of tokens.
+    ;
+    ; Optional Aruments:
+    ;
+    ;   smooth - Enables smoothing of counts
+    ;
+    ;        additive - Laplace Smoothing. Takes a number (delta) to add to
+    ;                       each n-gram frequency.
+    ;                   * Can be called on n-grams and (n-1)-grams.
+    ;                   * NOTE: the delta passed will count each n-gram, 
+    ;                           meaning that the smoothed frequency of an 
+    ;                           (n-1)-gram is increased by  |V| * delta, where 
+    ;                           V is the size of the vocabulary.
+    ;
     (define/public (probability sent . args)
       (priv-probability (tokenize sent) args))
 
-        
-    ; generate k random tokens of text subject to training distribution
-    (define/public (generate k start-tok)
-      (if (= (length start-tok) (- n 1))
-          (append start-tok (priv-generate k start-tok))
-          (error "start-token argument for generate is wrong length")))
-     
     
-    ; Gives access to ngram counts
-    (define/public (get-frequency phrase)
+    ; generate: <int> <(n-1)-gram>
+    ;
+    ; Purpose: Generate k random tokens of text using training distribution.
+    ;
+    ; Arguments:
+    ;
+    ;   k - How many random tokens to generate.
+    ;
+    ;   start-toks - Beginning (n-1)-gram to start phrase generation.
+    ;
+    ; TODO - Have generator begin new sentence after </s> rather than quit.
+    ;
+    (define/public (generate k start-toks)
+      (if (= (length start-toks) (- n 1))
+          (append start-toks (priv-generate k start-toks))
+          (error "start-tokens argument for generate is wrong length")))
+     
+
+    ; get-frequency: <phrase> ['smooth 'additive <number>]
+    ;
+    ; Purpose: Gives access to ngram counts
+    ;
+    ; Optional Aruments:
+    ;
+    ;   smooth - Enables smoothing of counts
+    ;
+    ;        additive - Laplace Smoothing. Takes a number (delta) to add to
+    ;                       each n-gram frequency.
+    ;                   * Can be called on n-grams and (n-1)-grams.
+    ;                   * NOTE: the delta passed will count each n-gram, 
+    ;                           meaning that the smoothed frequency of an 
+    ;                           (n-1)-gram is increased by  |V| * delta, where 
+    ;                           V is the size of the vocabulary.
+    ;
+    (define/public (get-frequency phrase . args)
       (let
           ((k (length phrase)))
         (if (or (= k (sub1 n)) (= k n))
-            (hash-ref freqs phrase 0)
+            (smoothed phrase args)
             (error (string-append "Cannot look up frequency of "
                                   (number->string k)
                                   "-gram")))))
-
-    ; Debugging purposes - give access to data members
-    ;(define/public (get-freqs) freqs)
-    ;(define/public (get-vocab) vocab)
+    
     
     
     ;;;;;;;;;;;;;;;;;;;;;;;;;;;; Private Methods ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -93,25 +135,26 @@
         (if (< (length s) n)
             0.0   ; log space  -> log(1) = 0
             (let
-                ((count (hash-ref freqs (get-n s    n   ) epsilon1))
-                 (total (hash-ref freqs (get-n s (- n 1)) epsilon2)))
-              (let*
-                  ; smoothing
-                  ((smoothed (smoothing args count total)))
-                (lg* (fl (log smoothed))         ; probability of ngram
-                     (helper-prob (cdr s)))))))  ; probability of the rest
-
+                ((count (smoothed (get-n s    n   ) args))
+                 (total (smoothed (get-n s (- n 1)) args)))
+              (lg* (fl (log (/ count total)))    ; probability of ngram
+                   (helper-prob (cdr s))))))    ; probability of the rest
+      
+      
       ; Replace unseen tokens with OOV token
       (define (helper-OOV-convert tok) 
-        (if (set-member? vocab tok) tok "OOV"))
+        (if (or (set-member? vocab tok)
+                (equal? tok "<s>")
+                (equal? tok "</s>"))
+            tok 
+            "OOV"))
       
       (if (< (length toks) n)
           (error "toks argument for priv-probability is wrong length")
           (let*
               ((oov-replaced (map helper-OOV-convert toks))
-               (sent-with-tags (append '("<s>") oov-replaced '("</s>")))
-               (retVal (expt 2.718281828459045 (helper-prob sent-with-tags))))
-
+               (retVal (expt 2.718281828459045 (helper-prob oov-replaced))))
+            
             ; If VERY small, then return 0 
             (if (< retVal (expt 10 -10))
                 0
@@ -131,20 +174,18 @@
               
               ; count frquencies of n- and (n-1)-grams
               (let
-                  ((toks (append '("<s>")
-                                 (tokenize line)
-                                 '("</s>"))))
+                  ((toks(tokenize line)))
                 (count-sentence toks    n   ) 
                 (count-sentence toks (- n 1)))
               ; goto next line
               (build-model-helper my-in-port)))))
     
-
+    
     
     ; Update vocabulary of model
     (define/private (update-vocabulary s)
       (if (null? s)
-          0
+          void
           (begin
             (cond
               ((and (not (equal? (car s) "<s>"))
@@ -188,16 +229,41 @@
       (if (or (= k 0) (null? lst))
           '()
           (cons (car lst)
-                (get-n (cdr lst) (- k 1)))));;
-    
+                (get-n (cdr lst) (- k 1)))))
     
 
-    ; Smoothing 
-    (define/private (smoothing args count total)
-      (cond
-        ; no smoothing
-        ((null? args) 
-         (/ count total))
+    ; Smoothing
+    (define/private (smoothed phrase args)     
+      (if (and (not (= (length phrase) (- n 1)))
+               (not (= (length phrase)    n  )))
+          (error "Cannot get frequency of non n/(n-1)-gram")
+          (let*
+              ((true-count (hash-ref freqs phrase (if (= (length phrase) n)
+                                                      epsilon1
+                                                      epsilon2))))
+            (cond
+              ; no smoothing
+              ((not (memq 'smooth args))
+               true-count)
+              
+              ; additive (Laplace) smoothing
+              ((memq 'additive args)
+               (let
+                   ((delta (cadr (memq 'additive args))))
+                 (if (= (length phrase) n)
+                     (+ true-count delta)                  ;  n   -gram
+                     (+ true-count (* delta                ; (n-1)-gram
+                                      (length (set->list vocab))))))) 
+              
+              (else (error "Other smoothing methods are not yet supported"))))))
+      
+
+  ; Smoothing
+  (define/private (smoothing args count total)
+    (cond
+      ; no smoothing
+      ((null? args) 
+       (/ count total))
         
         ; additive (Laplace) smoothing
         ((equal? (car args) 'additive)
@@ -239,20 +305,3 @@
 ))
    
 
-
-; Instantiate model
-(define model-a (new ngram-model (n 2)))
-(define model-b (new ngram-model (n 1)))
-
-; Train model on input data
-(send model-a train "data/greet.txt")
-
-; Predict probabiity of a sentence
-(display (send model-a probability "Cher read a book"))
-(newline)
-(display (send model-a probability "Cher read a book" 'additive 1))
-(newline)
-
-; Generate a random sequence of text
-(display (send model-a generate 10 '("<s>")))
-(newline)

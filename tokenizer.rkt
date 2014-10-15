@@ -15,5 +15,7 @@
     
 ; Dummy tokenizer for now.
 (define (tokenize sent)
-  (string-split sent " "))
+  (append '("<s>")
+          (string-split sent " ")
+          '("</s>")))
 
