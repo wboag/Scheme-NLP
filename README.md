@@ -24,5 +24,5 @@ Currently, Scheme-NLP has:
     2) A word stemming module. This module:
 
         - implements Porter's stemming algorithm.
-        - can stem a word down to its root. (ex. "training" -> "train")
+        - can stem a word down to its root. (ex. ""excited"" -> ""excit"")
         - does not need any training data.
