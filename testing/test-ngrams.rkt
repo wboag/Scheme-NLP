@@ -9,11 +9,13 @@
 (define model-b (new ngram-model (n 1)))
 
 ; Train model on input data
-(send model-a train "../data/greet.txt")
+(send model-a train 'file "../data/greet.txt")
 
 ; Predict probabiity of a sentence
 (newline)
 (display "<probability>")
+(newline)
+(display (send model-a probability "John read Moby Dick"))
 (newline)
 (display (send model-a probability "Cher read a book"))
 (newline)
