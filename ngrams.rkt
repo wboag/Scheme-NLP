@@ -18,6 +18,7 @@
 (require math/distributions)  ; for text generation
 
 (require "tokenizer.rkt")
+(require "parse-args.rkt")
 
 
 ; Make ngram model importable
@@ -45,19 +46,57 @@
     
     ; train: [train-file]
     ; ex. (send this-model train "data/greet.txt")
-    (define/public (train . train-file)
+    ;
+    ; TODO
+    ;      1) Add argument to give list of list of tokens
+    ;      2) Iterate over tokens & update vocab IN train
+    ;
+    (define/public (train . args)
       ; OOV token for predicting on unseen tokens
       (set-add! vocab "OOV")
       
-      ; parse arguments
-      (cond
-        ((= (length train-file) 0)
-         (build-model-helper (open-input-file (string->path "data/greet.txt"))))
-        ((= (length train-file) 1)
-         (build-model-helper (open-input-file (string->path (car train-file)))))
-        (else
-         (error "Too many arguments given to train"))))
+      (let
+          ((toks (parse-train-toks (cons 'tags args))))
 
+        ; read the ngrams from the file
+        ;(define/private (build-model-helper my-in-port)
+        ;  (let
+        ;      ((line (read-line my-in-port)))
+        ;    (if (eq? line eof)
+        ;        void
+        ;        (begin 
+        ;          ; read line into vocabulary
+        ;          (update-vocabulary (tokenize line))
+        ;           
+        ;           ; count frquencies of n- and (n-1)-grams
+        ;           (let
+        ;              ((toks(tokenize line 'tags)))
+        ;            (count-sentence toks    n   ) 
+        ;            (count-sentence toks (- n 1)))
+        ;          ; goto next line
+        ;          (build-model-helper my-in-port)))))        
+        
+        ; Update vocabulary with all toks
+        (map (lambda (t)
+               (cond
+                 ((and (not (equal? t "<s>"))
+                      (not (equal? t "</s>")))
+                 (set-add! vocab t))))
+             (foldr (lambda (this result)
+                      (append this result))
+                    '()
+                    toks))
+  
+        ; Count frequency of n- and (n-1)-grams
+        (define (count-grams k ll-of-toks)
+          (map (lambda (sent)
+                 (count-sentence sent k))
+               ll-of-toks))        
+        (count-grams (- n 1) toks)
+        (count-grams    n    toks)
+
+        void))
+    
 
     ; probability: <n-gram|(n-1)-gram> ['smooth 'additive <number>]
     ;
@@ -75,8 +114,12 @@
     ;                           (n-1)-gram is increased by  |V| * delta, where 
     ;                           V is the size of the vocabulary.
     ;
+    ;
+    ; TODO - Change so that adding <s> and </s> tags is optional & defaults to off
+    ; 
     (define/public (probability sent . args)
-      (priv-probability (tokenize sent) args))
+      (priv-probability (sentence->sentence-tagged-tokens sent)
+                        args))
 
     
     ; generate: <int> <(n-1)-gram>
@@ -159,44 +202,10 @@
             (if (< retVal (expt 10 -10))
                 0
                 retVal))))
-    
-    
-    
-    ; read the ngrams from the file
-    (define/private (build-model-helper my-in-port)
-      (let
-          ((line (read-line my-in-port)))
-        (if (eq? line eof)
-            void
-            (begin 
-              ; read line into vocabulary
-              (update-vocabulary (tokenize line))
-              
-              ; count frquencies of n- and (n-1)-grams
-              (let
-                  ((toks(tokenize line)))
-                (count-sentence toks    n   ) 
-                (count-sentence toks (- n 1)))
-              ; goto next line
-              (build-model-helper my-in-port)))))
-    
-    
-    
-    ; Update vocabulary of model
-    (define/private (update-vocabulary s)
-      (if (null? s)
-          void
-          (begin
-            (cond
-              ((and (not (equal? (car s) "<s>"))
-                    (not (equal? (car s) "</s>")))
-               (set-add! vocab (car s))))
-            (update-vocabulary (cdr s)))))
-    
-    
+
+        
     
     ; Count frequencies of one line
-    ; Buzzword: Map/Reduce
     (define/private (count-sentence line k)
 
       ; Group list of tokens into ngrams
